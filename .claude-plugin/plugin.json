@@ -1,0 +1,12 @@
+{
+  "name": "mcp-asc",
+  "version": "0.6.0",
+  "description": "Apple App Store Connect API — MCP server for Xcode Cloud operations (build runs, apps, products, reviews, sales).",
+  "author": {
+    "name": "menot-you",
+    "url": "https://menot.sh"
+  },
+  "homepage": "https://github.com/menot-you/mcp-asc",
+  "license": "Apache-2.0",
+  "keywords": ["mcp", "xcode-cloud", "app-store-connect", "apple", "claude-code"]
+}

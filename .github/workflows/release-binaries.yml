@@ -1,0 +1,156 @@
+name: Release binaries
+
+# Cross-compile matrix; attaches binary tarballs + SHA256 checksums to the GitHub Release.
+# Triggered when a tag matching `v*` is pushed.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to upload binaries to (e.g. v0.6.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-binaries-${{ github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            ext: ""
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            ext: ""
+            archive: tar.gz
+            cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            ext: ""
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            ext: ""
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            ext: ".exe"
+            archive: zip
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: dtolnay/rust-toolchain@5b842231ba77f5c045dba54ac5560fed2db780e2 # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (for aarch64-linux)
+        if: matrix.cross == true
+        uses: taiki-e/install-action@2d5b196a2dc9984a136f1a2a41e1a33631d7c261
+        with:
+          tool: cross
+
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.cross }}" == "true" ]]; then
+            cross build --release --target ${{ matrix.target }} --bin nott-asc
+          else
+            cargo build --release --target ${{ matrix.target }} --bin nott-asc
+          fi
+
+      - name: Package artifact
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name || inputs.tag }}"
+          NAME="nott-asc-${TAG}-${{ matrix.target }}"
+          DIST="dist"
+          mkdir -p "${DIST}"
+          BIN_DIR="target/${{ matrix.target }}/release"
+          EXT="${{ matrix.ext }}"
+
+          if [[ "${{ matrix.archive }}" == "zip" ]]; then
+            (cd "${BIN_DIR}" && 7z a "../../../${DIST}/${NAME}.zip" "nott-asc${EXT}")
+            ASSET="${DIST}/${NAME}.zip"
+          else
+            tar -czf "${DIST}/${NAME}.tar.gz" -C "${BIN_DIR}" "nott-asc${EXT}"
+            ASSET="${DIST}/${NAME}.tar.gz"
+          fi
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${ASSET}" | awk '{print $1}' > "${ASSET}.sha256"
+          else
+            shasum -a 256 "${ASSET}" | awk '{print $1}' > "${ASSET}.sha256"
+          fi
+          echo "asset=${ASSET}" >> "$GITHUB_OUTPUT"
+          echo "checksum=${ASSET}.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name || inputs.tag }}"
+          gh release upload "${TAG}" \
+            "${{ steps.package.outputs.asset }}" \
+            "${{ steps.package.outputs.checksum }}" \
+            --clobber --repo "${{ github.repository }}"
+
+  upload-installer:
+    name: Upload install.sh to release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name || inputs.tag }}"
+          gh release upload "${TAG}" install.sh --clobber --repo "${{ github.repository }}"
+
+  aggregate-checksums:
+    name: Aggregate SHA-256 manifest
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name || inputs.tag }}"
+          mkdir -p checksums
+          gh release view "${TAG}" --json assets --jq '.assets[] | select(.name | endswith(".sha256")) | .name' \
+            | while read -r name; do
+                gh release download "${TAG}" -p "${name}" -D checksums
+              done
+          (cd checksums && for f in *.sha256; do
+             asset="${f%.sha256}"
+             echo "$(cat "$f")  ${asset}"
+          done) > SHA256SUMS
+
+          gh release upload "${TAG}" SHA256SUMS --clobber --repo "${{ github.repository }}"

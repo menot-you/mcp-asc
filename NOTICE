@@ -1,0 +1,18 @@
+nott-asc
+Copyright 2026 menot-you
+
+This product includes software developed by menot-you (https://menot.sh).
+
+Licensed under the Apache License, Version 2.0. See LICENSE for details.
+
+---
+
+This MCP server is part of the `nott` family of Claude Code plugins.
+Source: https://github.com/menot-you/mcp-asc
+Forked baseline: https://github.com/menot-you/mcp-template-apache
+
+Predecessor (deprecated): https://github.com/menot-you/apple-store-connect (AGPL-3.0)
+
+Note: depends on `jsonwebtoken` crate with `rust_crypto` feature. RUSTSEC-2023-0071
+applies to the embedded RSA implementation but has no runtime exposure
+(JWT signing here uses ES256, not RSA).
