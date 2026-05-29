@@ -1,10 +1,11 @@
 [package]
 name = "menot-you-mcp-asc"
-version = "0.70.0"
+workspace = "../../rust"
+version.workspace = true
 edition = "2024"
-rust-version = "1.85"
+rust-version.workspace = true
 description = "MCP server for Apple App Store Connect API — Xcode Cloud operations"
-license = "Apache-2.0"
+license.workspace = true
 repository = "https://github.com/menot-you/apple-store-connect"
 homepage = "https://github.com/menot-you/apple-store-connect"
 readme = "README.md"
