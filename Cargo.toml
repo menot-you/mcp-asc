@@ -2,7 +2,7 @@
 name = "menot-you-mcp-asc"
 workspace = "../../rust"
 version.workspace = true
-edition = "2024"
+edition.workspace = true
 rust-version.workspace = true
 description = "MCP server for Apple App Store Connect API — Xcode Cloud operations"
 license.workspace = true
