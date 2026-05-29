@@ -90,11 +90,10 @@ impl Credentials {
             .cache
             .lock()
             .map_err(|_| AuthError::EncodingError("token cache lock poisoned".into()))?;
-        if let Some(cached) = cache.as_ref() {
-            if cached.created_at.elapsed() < TOKEN_LIFETIME {
+        if let Some(cached) = cache.as_ref()
+            && cached.created_at.elapsed() < TOKEN_LIFETIME {
                 return Ok(cached.token.clone());
             }
-        }
         let token = self.generate_token()?;
         *cache = Some(CachedToken {
             token: token.clone(),
